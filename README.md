@@ -57,37 +57,22 @@ Visualization and analysis:
 ### main.py
 Main training script that orchestrates the entire training process.
 
-## Quick Start
-
-1. **Install dependencies**:
-```bash
-pip install torch numpy matplotlib pandas scipy pyDOE
-```
-
-2. **Prepare data** (if using pretraining):
-   - Place your CSV file with pretraining data in the appropriate location
-   - Update the file path in `main.py` (line ~20 in pretrain_network call)
-
-3. **Run training**:
-```bash
-python main.py
-```
 
 ## Training Process
 
 The training follows a three-phase approach:
 
-### Phase 1: Pretraining
+### Phase 0: Pretraining
 - Uses provided CSV data to pretrain the networks
 - Helps initialize weights with reasonable approximations
 - Configurable via `PRE_EPS` in `config.py`
 
-### Phase 2: Adam Optimization
+### Phase 1: Adam Optimization
 - Adaptive sampling around the interface
 - Learning rate scheduling
 - Configurable via `ADAM_EPS` in `config.py`
 
-### Phase 3: L-BFGS Refinement
+### Phase 2: L-BFGS Refinement
 - Multiple cycles of L-BFGS optimization
 - Convergence monitoring
 - Best model selection
@@ -110,15 +95,6 @@ The training follows a three-phase approach:
 - Specialized architectures for different prediction tasks
 - Shared optimization for coupled physics
 
-## Configuration
-
-Modify `config.py` to adjust:
-
-- **Physical parameters**: Material properties, boundary conditions
-- **Domain settings**: Spatial and temporal boundaries
-- **Training parameters**: Point counts, optimization settings
-- **Network architecture**: Layers, nodes, activation functions
-
 ## Outputs
 
 The training generates:
@@ -126,40 +102,6 @@ The training generates:
 - Comprehensive loss plots (`comprehensive_loss.png`)
 - Weight evolution plots (`weight_evolution.png`)
 - Trained model parameters (in memory)
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Memory errors**:
-   - Reduce `N_c_s`, `N_c_f`, `N_b`, `N_i` in `config.py`
-   - Use smaller network architectures
-
-2. **Training instability**:
-   - Adjust learning rates in `training.py`
-   - Modify adaptive weight parameters (tau value)
-   - Check physical parameter consistency
-
-3. **Slow convergence**:
-   - Increase pretraining epochs (`PRE_EPS`)
-   - Adjust L-BFGS cycle parameters
-   - Verify boundary condition implementations
-
-### Performance Tips
-
-- Use GPU for faster training (automatically detected)
-- Monitor interface change during L-BFGS cycles for convergence
-- Adjust adaptive sampling parameters for your specific problem
-- Consider domain decomposition for larger problems
-
-## Extending the Code
-
-To modify for different problems:
-
-1. **New physics**: Update loss functions in `training.py`
-2. **Different domains**: Modify point generation in `domain.py`
-3. **Alternative architectures**: Extend networks in `networks.py`
-4. **Additional constraints**: Add new loss terms to `AdaptiveWeightedPDDL`
 
 ## Citation
 
