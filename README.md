@@ -40,14 +40,6 @@ Each animation demonstrates:
 - **Phase change materials** for energy storage
 - **Geological solidification** processes
 
-## 🔍 Insights from Multi-Aspect Ratio Study
-
-The 5 different aspect ratios (parameter P) reveal how geometry affects:
-- **Solidification rate** and completion time
-- **Interface curvature** and morphology
-- **Temperature gradient** distributions
-- **Heat extraction** efficiency
-
 ## 📚 Citation
 
 If you use this code in your research, please cite the relevant foundational papers in physics-informed neural networks and solidification modeling.
