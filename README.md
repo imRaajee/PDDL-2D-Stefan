@@ -8,7 +8,7 @@ The simulation captures the solidification process across different aspect ratio
 
 | Aspect Ratio 1 | Aspect Ratio 2 | Aspect Ratio 3 |
 |----------------|----------------|----------------|
-| ![AR1](results/ar1_solidification.gif) | ![AR2](results/ar2_solidification.gif) | ![AR3](results/ar3_solidification.gif) |
+| ![AR1](/animations/solidification_animation.gif) | ![AR2](results/ar2_solidification.gif) | ![AR3](results/ar3_solidification.gif) |
 
 | Aspect Ratio 4 | Aspect Ratio 5 |
 |----------------|----------------|
