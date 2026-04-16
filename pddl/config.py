@@ -17,7 +17,7 @@ y_min, y_max = 0.0, 1.0
 t_min, t_max = 0.0, 1000 / t_ref
 p_min, p_max = 0.0, 1.0
 
-P = [0.5, 2.5]
+P = [1.0, 5.0] / 2
 
 # Boundary temperatures
 temp_inf = 10
@@ -69,7 +69,7 @@ eps = 0.01
 
 # Optimization parameters
 LBFGS_STP = 100
-ADAM_EPS = 1000
+ADAM_EPS = 20000
 CY_LBFGS = 10
-IT_LBFGS = 5
+IT_LBFGS = 20
 PRE_EPS = 5000
