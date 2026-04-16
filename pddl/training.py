@@ -80,11 +80,15 @@ def enhanced_adaptive_sampler(Ss, xyt_col_s, xyt_col_S, xyt_col_f, n_extra=500, 
     
     col_s_solid = xyt_col_s[solid_mask].clone()
     col_s_liquid = xyt_col_s[liquid_mask].clone()
-    col_f_fluid = xyt_col_f.clone()
+    col_f_fin = xyt_col_f.clone()
     
+    col_s_solid = col_s_solid[~torch.isnan(col_s_solid).any(dim=1)]
+    col_s_liquid = col_s_liquid[~torch.isnan(col_s_liquid).any(dim=1)]
+    col_f_fin = col_f_fin[~torch.isnan(col_f_fin).any(dim=1)]
+
     col_s_solid.requires_grad = True
     col_s_liquid.requires_grad = True
-    col_f_fluid.requires_grad = True
+    col_f_fin.requires_grad = True
     
     return {
         'col_s': new_xyt_col_s,
@@ -92,14 +96,14 @@ def enhanced_adaptive_sampler(Ss, xyt_col_s, xyt_col_S, xyt_col_f, n_extra=500, 
         'X_interface': X_interface,
         'col_s_solid': col_s_solid,
         'col_s_liquid': col_s_liquid,
-        'col_f_fluid': col_f_fluid
+        'col_f_fin': col_f_fin
     }
 
 class AdaptiveWeightedPDDL:
     def __init__(self, domain_points):
         self.domain_points = domain_points
         self.net1 = DNN1(dim_in=4, dim_out=3, n_layer=4, n_node=40, ub=ub, lb=lb).to(device)
-        self.net2 = DNN2(dim_in=3, dim_out=1, n_layer=3, n_node=40, ub=ub, lb=lb).to(device)
+        self.net2 = DNN2(dim_in=3, dim_out=1, n_layer=3, n_node=30, ub=ub, lb=lb).to(device)
         self.net3 = DNN3(dim_in=4, dim_out=3, n_layer=4, n_node=40, ub=ub, lb=lb).to(device)
 
         self.lbfgs = torch.optim.LBFGS(
@@ -115,15 +119,15 @@ class AdaptiveWeightedPDDL:
 
         self.adam = torch.optim.Adam(
             list(self.net1.parameters()) + list(self.net2.parameters()) + list(self.net3.parameters()), 
-            lr=1e-3
+            lr=5e-4
         )
         
         # Adaptive loss weights
         self.loss_weights = {
-            'bc': nn.Parameter(torch.tensor(1.0)),
-            'ic': nn.Parameter(torch.tensor(1.0)),
-            'int': nn.Parameter(torch.tensor(1.0)),
-            'pde': nn.Parameter(torch.tensor(1.0))
+            'bc': nn.Parameter(torch.tensor(1.0).to(device)),
+            'ic': nn.Parameter(torch.tensor(1.0).to(device)),
+            'int': nn.Parameter(torch.tensor(1.0).to(device)),
+            'pde': nn.Parameter(torch.tensor(1.0).to(device))
         }
         
         self.losses = {"bc": [], "ic": [], "int": [], "pde": []}
@@ -152,28 +156,30 @@ class AdaptiveWeightedPDDL:
         qf_y = out3[:, 2:3]
         return Tf, qf_x, qf_y
 
-    def bc_loss(self):
-        dp = self.domain_points
-        Tf_left = self.predict_Tf(dp['xyt_bnd_left_f'])[0]
-        qf_x_left = self.predict_Tf(dp['xyt_bnd_left_f'])[1]
-        Tf_mid = self.predict_Tf(dp['xyt_bnd_middle'])[0]
+    def bc_loss(self, left_s, right_s, up_s, left_f, right_f, down_f, middle):
+        Tf_left = self.predict_Tf(left_f)[0]
+        qf_x_left = self.predict_Tf(left_f)[1]
+        Tf_mid = self.predict_Tf(middle)[0]
+        qf_y_mid = self.predict_Tf(middle)[2]
 
-        Ts_left = self.predict_Ts(dp['xyt_bnd_left_s'])[0]
-        qs_x_left = self.predict_Ts(dp['xyt_bnd_left_s'])[1]
-        Ts_mid = self.predict_Ts(dp['xyt_bnd_middle'])[0]
+        Ts_left = self.predict_Ts(left_s)[0]
+        qs_x_left = self.predict_Ts(left_s)[1]
+        Ts_mid = self.predict_Ts(middle)[0]
+        qs_y_mid = self.predict_Ts(middle)[2]
 
-        qf_y_down = self.predict_Tf(dp['xyt_bnd_bottom'])[2]
-        qf_x_right = self.predict_Tf(dp['xyt_bnd_right_f'])[1]
-        qs_y_up = self.predict_Ts(dp['xyt_bnd_top'])[2]
-        qs_x_right = self.predict_Ts(dp['xyt_bnd_right_s'])[1]
-
+        qf_y_down = self.predict_Tf(down_f)[2]
+        qf_x_right = self.predict_Tf(right_f)[1]
+        qs_y_up = self.predict_Ts(up_s)[2]
+        qs_x_right = self.predict_Ts(right_s)[1]
+        
         mse_bc = (torch.mean(torch.square(Ts_left * Bi_s - qs_x_left)) + 
                  torch.mean(torch.square(Tf_left * Bi_f - qf_x_left)) + 
                  torch.mean(torch.square(Ts_mid - Tf_mid)) + 
                  torch.mean(torch.square(qf_y_down)) + 
                  torch.mean(torch.square(qf_x_right)) + 
                  torch.mean(torch.square(qs_y_up)) + 
-                 torch.mean(torch.square(qs_x_right)))
+                 torch.mean(torch.square(qs_x_right)) + 
+                 torch.mean(torch.square(qf_y_mid - qs_y_mid * k_s / k_f)))
 
         return mse_bc
 
@@ -196,7 +202,7 @@ class AdaptiveWeightedPDDL:
         col_S_processed = col_S_processed.detach().requires_grad_(True)
         
         s = self.predict_s(col_S_processed)
-        Ts = self.predict_Ts(X_interface)[2]
+        Ts = self.predict_Ts(X_interface)[0]
 
         ds_dx = grad(s.sum(), col_S_processed, create_graph=True)[0][:, 0:1]
         ds_dt = grad(s.sum(), col_S_processed, create_graph=True)[0][:, 1:2]
@@ -209,20 +215,20 @@ class AdaptiveWeightedPDDL:
         mse_interface = mse_pde_s + mse_temp
         return mse_interface
 
-    def pde_loss(self, col_s_solid, col_s_liquid, col_f_fluid):
+    def pde_loss(self, col_s_solid, col_s_liquid, col_f_fin):
         # Ensure proper gradient tracking
         col_s_solid = col_s_solid.detach().requires_grad_(True)
         col_s_liquid = col_s_liquid.detach().requires_grad_(True)
-        col_f_fluid = col_f_fluid.detach().requires_grad_(True)
+        col_f_fin = col_f_fin.detach().requires_grad_(True)
         
         Ts = self.predict_Ts(col_s_solid)[0]
         qs_x = self.predict_Ts(col_s_solid)[1]
         qs_y = self.predict_Ts(col_s_solid)[2]
 
         Tl = self.predict_Ts(col_s_liquid)[0]
-        Tf = self.predict_Tf(col_f_fluid)[0]
-        qf_x = self.predict_Tf(col_f_fluid)[1]
-        qf_y = self.predict_Tf(col_f_fluid)[2]
+        Tf = self.predict_Tf(col_f_fin)[0]
+        qf_x = self.predict_Tf(col_f_fin)[1]
+        qf_y = self.predict_Tf(col_f_fin)[2]
 
         grads_Ts = grad(Ts.sum(), col_s_solid, create_graph=True)[0]
         dTs_dx = grads_Ts[:, 0:1]
@@ -232,13 +238,13 @@ class AdaptiveWeightedPDDL:
         dTs_dxx = grad(qs_x.sum(), col_s_solid, create_graph=True)[0][:, 0:1]
         dTs_dyy = grad(qs_y.sum(), col_s_solid, create_graph=True)[0][:, 1:2]
 
-        grads_Tf = grad(Tf.sum(), col_f_fluid, create_graph=True)[0]
+        grads_Tf = grad(Tf.sum(), col_f_fin, create_graph=True)[0]
         dTf_dx = grads_Tf[:, 0:1]
         dTf_dy = grads_Tf[:, 1:2]
         dTf_dt = grads_Tf[:, 2:3]
 
-        dTf_dxx = grad(qf_x.sum(), col_f_fluid, create_graph=True)[0][:, 0:1]
-        dTf_dyy = grad(qf_y.sum(), col_f_fluid, create_graph=True)[0][:, 1:2]
+        dTf_dxx = grad(qf_x.sum(), col_f_fin, create_graph=True)[0][:, 0:1]
+        dTf_dyy = grad(qf_y.sum(), col_f_fin, create_graph=True)[0][:, 1:2]
 
         pde_Ts = (dTs_dt) - (dTs_dxx + dTs_dyy)
         pde_Tf = alfa * (dTf_dt) - (dTf_dxx + dTf_dyy)
@@ -284,7 +290,7 @@ class AdaptiveWeightedPDDL:
                                     processed_points['col_S_processed'])
         mse_pde = self.pde_loss(processed_points['col_s_solid'], 
                               processed_points['col_s_liquid'], 
-                              processed_points['col_f_fluid'])
+                              processed_points['col_f_fin'])
 
         weight_sum = 0
 
